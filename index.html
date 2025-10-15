@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Stable & Vasospastic Angina – Drug Match</title>
+<style>
+  :root{
+    --bg:#0b1220; --card:#121a2b; --ink:#e8eefc; --muted:#a7b1c9;
+    --ok:#2ecc71; --bad:#e74c3c; --accent:#5b8cff;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial;
+    background:radial-gradient(1200px 800px at 10% -10%, #15243f, #0b1220 60%);
+    color:var(--ink);
+    min-height:100vh; display:flex; flex-direction:column; gap:20px;
+  }
+  header{padding:18px 20px 0}
+  h1{margin:0 0 6px; font-size:clamp(20px,3.6vw,30px); font-weight:750; letter-spacing:.2px}
+  p.lead{margin:0; color:var(--muted)}
+  .wrap{display:grid; gap:18px; padding:10px 20px 28px}
+  @media(min-width:900px){ .wrap{ grid-template-columns:1fr 1fr; } }
+  .panel{
+    background:linear-gradient(180deg, #121a2b 0%, #0f1728 100%);
+    border:1px solid #1e2740; border-radius:16px; padding:16px; box-shadow:0 10px 30px rgba(0,0,0,.35);
+  }
+  .panel h2{margin:0 0 8px; font-size:18px; color:#c9d7ff; font-weight:700}
+  .list, .grid{display:grid; gap:10px}
+  .list{grid-auto-rows:minmax(48px,auto)}
+  .pill{
+    background:#0e1628; border:1px solid #223055; border-radius:12px; padding:10px 12px;
+    font-weight:650; cursor:grab; user-select:none; display:flex; align-items:center; justify-content:space-between;
+    transition:transform .08s ease, border-color .15s ease, background .15s ease;
+  }
+  .pill:active{transform:scale(.98); cursor:grabbing}
+  .pill.lock{cursor:default; background:#0f1b33; border-color:#28407a}
+  .desc{
+    border:1.5px dashed #2a3a62; border-radius:12px; padding:12px; min-height:56px;
+    display:grid; align-items:center; transition:border-color .15s ease, background .15s ease;
+    background:#0e1527;
+  }
+  .desc .slotTitle{color:#c9d7ff; font-weight:700; font-size:14px; margin-bottom:4px}
+  .desc .text{color:#dbe6ff; font-size:14px; line-height:1.25}
+  .desc.correct{border-color:var(--ok); background:rgba(46,204,113,.08)}
+  .desc.wrong{border-color:var(--bad); background:rgba(231,76,60,.08)}
+  .desc .accept{opacity:.65; font-style:italic; font-size:12px}
+  .footer{
+    display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between; margin-top:6px;
+  }
+  .btn{
+    appearance:none; border:none; border-radius:12px; padding:10px 14px; font-weight:700; cursor:pointer;
+    background:linear-gradient(180deg,#6b90ff,#4f73f1); color:white; box-shadow:0 6px 18px rgba(79,115,241,.35);
+  }
+  .btn.secondary{background:#192548; color:#d7e3ff; box-shadow:none; border:1px solid #2a3a62}
+  .score{color:#cfe0ff; font-weight:700}
+  .tiny{font-size:12px; color:#9fb0d6}
+  .tag{display:inline-block; padding:.2em .55em; border:1px solid #2a3a62; border-radius:999px; font-size:12px; color:#b9c9f5}
+  .bucket{display:flex; gap:8px; flex-wrap:wrap; margin-top:6px}
+</style>
+</head>
+<body>
+  <header>
+    <h1>Match the Drug to Its Correct (Category-Included) Description</h1>
+    <p class="lead">Drag each <b>drug</b> (left) onto its matching <b>description</b> (right). Items are shuffled on load.</p>
+  </header>
+
+  <div class="wrap">
+    <section class="panel">
+      <h2>Drugs</h2>
+      <div id="drugList" class="list" aria-label="Draggable drug names"></div>
+      <div class="footer">
+        <div class="bucket" id="legend"></div>
+        <div>
+          <button id="shuffle" class="btn">Shuffle</button>
+          <button id="reset" class="btn secondary">Reset</button>
+        </div>
+      </div>
+      <p class="tiny">Tip: you can also tap/click a drug and then a target to drop it.</p>
+    </section>
+
+    <section class="panel">
+      <h2>Descriptions</h2>
+      <div id="descGrid" class="grid"></div>
+      <div class="footer">
+        <div class="score" id="scoreArea">0 / 14 correct</div>
+        <div class="tiny">Source: CPR-2 “Drugs Used in ACS/Stable Angina” slides (Konorev). See note above.</div>
+      </div>
+    </section>
+  </div>
+
+<script>
+/* ---------- Data (strictly from the provided PDF) ---------- */
+const ITEMS = [
+  // NITRATES
+  {id:"nitroglycerin", label:"Nitroglycerin", group:"Nitrates",
+   desc:"Nitrate (nitrovasodilator): predominantly venous dilation → ↓ preload and myocardial O₂ demand; short-acting SL/spray for relief of an angina attack."},
+  {id:"isdn", label:"Isosorbide dinitrate", group:"Nitrates",
+   desc:"Nitrate (nitrovasodilator): venous > arterial dilation to ↓ preload/O₂ demand; SL 30–60 min or longer-acting oral forms to prevent attacks."},
+  {id:"ismo", label:"Isosorbide mononitrate", group:"Nitrates",
+   desc:"Nitrate (nitrovasodilator): higher oral bioavailability (poor substrate for nitrate reductase); long-acting oral option for prevention of angina."},
+
+  // CCB – DIHYDROPYRIDINES (NON-CARDIOACTIVE)
+  {id:"amlodipine", label:"Amlodipine", group:"CCB – non-cardioactive (dihydropyridine)",
+   desc:"Calcium channel blocker, dihydropyridine: arteriolar vasodilator → ↓ PVR/afterload and BP (long-acting, t½ ~30–50 h); prevents episodes incl. vasospastic angina."},
+  {id:"nifedipine", label:"Nifedipine", group:"CCB – non-cardioactive (dihydropyridine)",
+   desc:"Calcium channel blocker, dihydropyridine: potent arteriolar vasodilator → ↓ afterload/BP; short-acting forms can cause reflex tachycardia—prefer long-acting."},
+  {id:"nicardipine", label:"Nicardipine", group:"CCB – non-cardioactive (dihydropyridine)",
+   desc:"Calcium channel blocker, dihydropyridine: peripheral arteriolar dilation to ↓ afterload/BP, improving O₂ balance in stable angina."},
+
+  // CCB – CARDIOACTIVE
+  {id:"diltiazem", label:"Diltiazem", group:"CCB – cardioactive",
+   desc:"Calcium channel blocker, cardioactive: dilates arterioles and ↓ heart rate/contractility → ↓ O₂ demand; commonly first-line for preventing vasospastic episodes."},
+  {id:"verapamil", label:"Verapamil", group:"CCB – cardioactive",
+   desc:"Calcium channel blocker, cardioactive: ↓ HR and contractility and dilates arterioles → ↓ O₂ demand; watch for bradyarrhythmias/AV block and constipation."},
+
+  // BETA-BLOCKERS
+  {id:"propranolol", label:"Propranolol", group:"Beta-blocker",
+   desc:"β-blocker: ↓ heart rate, contractility, and BP (afterload) → ↓ myocardial O₂ demand at rest and with exercise; cornerstone for chronic stable angina."},
+  {id:"nadolol", label:"Nadolol", group:"Beta-blocker",
+   desc:"β-blocker: reduces HR/contractility and lowers BP to lessen O₂ demand; improves diastolic perfusion time."},
+  {id:"metoprolol", label:"Metoprolol", group:"Beta-blocker",
+   desc:"β-blocker: decreases HR and contractility and lowers BP → reduced O₂ demand; used to control symptoms and improve exercise tolerance."},
+  {id:"atenolol", label:"Atenolol", group:"Beta-blocker",
+   desc:"β-blocker: ↓ HR/contractility and BP → ↓ afterload and O₂ demand in stable angina."},
+
+  // MISC
+  {id:"ranolazine", label:"Ranolazine", group:"Miscellaneous",
+   desc:"Late Na⁺-current inhibitor: limits ischemia-induced Na⁺/Ca²⁺ overload and normalizes repolarization, improving diastolic relaxation; used for stable angina refractory to standard meds; minimal effect on HR/BP."},
+  {id:"colchicine", label:"Colchicine", group:"Miscellaneous",
+   desc:"Anti-inflammatory: inhibits tubulin polymerization to reduce leukocyte migration and vascular wall inflammation; approved (2023) to lower CV events as continuous oral therapy on top of standard care."}
+];
+
+/* ---------- Utilities ---------- */
+const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const choice = a => a[Math.floor(Math.random()*a.length)];
+const shuffle = a => { for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; };
+
+let picked = null; // for click-to-drop
+
+function build() {
+  const drugList = $("#drugList");
+  const descGrid = $("#descGrid");
+  drugList.innerHTML = "";
+  descGrid.innerHTML = "";
+
+  const drugs = shuffle([...ITEMS]);    // random order of draggable pills
+  const targets = shuffle([...ITEMS]);  // random order of descriptions
+
+  // legend tags (categories)
+  const groups = [...new Set(ITEMS.map(i=>i.group))];
+  $("#legend").innerHTML = groups.map(g=>`<span class="tag">${g}</span>`).join("");
+
+  // Render pills
+  drugs.forEach(d=>{
+    const el = document.createElement("div");
+    el.className = "pill";
+    el.textContent = d.label;
+    el.setAttribute("draggable","true");
+    el.dataset.id = d.id;
+    el.title = d.group;
+    el.addEventListener("dragstart", e=>{
+      e.dataTransfer.setData("text/plain", d.id);
+    });
+    el.addEventListener("click", ()=>{
+      if(el.classList.contains("lock")) return;
+      picked = d.id;
+      // subtle highlight
+      $$(".pill").forEach(p=>p.style.outline="none");
+      el.style.outline = `2px solid var(--accent)`;
+      setTimeout(()=>el.style.outline="none", 300);
+    });
+    drugList.appendChild(el);
+  });
+
+  // Render targets
+  targets.forEach(t=>{
+    const box = document.createElement("div");
+    box.className = "desc";
+    box.dataset.id = t.id;
+
+    const title = document.createElement("div");
+    title.className = "slotTitle";
+    title.textContent = "Description";
+
+    const txt = document.createElement("div");
+    txt.className = "text";
+    txt.textContent = t.desc;
+
+    const accept = document.createElement("div");
+    accept.className = "accept";
+    accept.textContent = "Drop the matching drug here";
+
+    box.appendChild(title);
+    box.appendChild(txt);
+    box.appendChild(accept);
+
+    box.addEventListener("dragover", e=>{ e.preventDefault(); box.style.borderColor = "#6b90ff"; });
+    box.addEventListener("dragleave", ()=>{ box.style.borderColor = "#2a3a62"; });
+    box.addEventListener("drop", e=>{
+      e.preventDefault();
+      box.style.borderColor = "#2a3a62";
+      const id = e.dataTransfer.getData("text/plain");
+      handleDrop(id, box);
+    });
+    box.addEventListener("click", ()=>{
+      if(picked) handleDrop(picked, box);
+    });
+
+    descGrid.appendChild(box);
+  });
+
+  updateScore();
+}
+
+function handleDrop(drugId, box){
+  if(!drugId || box.classList.contains("correct")) return;
+  const targetId = box.dataset.id;
+  const pill = $(`.pill[data-id="${CSS.escape(drugId)}"]`);
+  if(!pill || pill.classList.contains("lock")) return;
+
+  if(drugId === targetId){
+    box.classList.remove("wrong");
+    box.classList.add("correct");
+    box.querySelector(".accept").innerHTML = `✅ Matched: <b>${pill.textContent}</b>`;
+    pill.classList.add("lock");
+    pill.setAttribute("draggable","false");
+    pill.style.opacity = .55;
+    pill.style.cursor = "default";
+  } else {
+    box.classList.add("wrong");
+    box.querySelector(".accept").textContent = "❌ Not a match. Try again.";
+    setTimeout(()=>{ box.classList.remove("wrong"); box.querySelector(".accept").textContent="Drop the matching drug here"; }, 700);
+  }
+  picked = null;
+  updateScore();
+}
+
+function updateScore(){
+  const correct = $$(".desc.correct").length;
+  $("#scoreArea").textContent = `${correct} / ${ITEMS.length} correct`;
+  if(correct === ITEMS.length){
+    $("#scoreArea").textContent += " – Great job!";
+  }
+}
+
+$("#shuffle").addEventListener("click", build);
+$("#reset").addEventListener("click", ()=>{
+  // re-render in the SAME order for descriptions, but unlock pills
+  $$(".pill").forEach(p=>{ p.classList.remove("lock"); p.style.opacity=1; p.style.cursor="grab"; p.setAttribute("draggable","true"); });
+  $$(".desc").forEach(d=>{ d.classList.remove("correct","wrong"); d.querySelector(".accept").textContent="Drop the matching drug here"; });
+  updateScore();
+});
+
+build();
+
+/* Basic touch support polyfill (tap pill, then tap box) is handled via click-to-drop above. */
+</script>
+</body>
+</html>
